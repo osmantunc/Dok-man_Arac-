@@ -1,0 +1,2 @@
+python-docx
+language-tool-python
