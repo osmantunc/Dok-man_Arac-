@@ -1,10 +1,10 @@
 import docx
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-import language_tool_python
 import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import requests
 
 def tr_upper(text): return text.replace("i", "İ").replace("ı", "I").upper()
 
@@ -33,25 +33,37 @@ def detect_heading_level(text, style_name):
     if 0 < len(text.split()) < 8 and text.isupper() and not text.endswith('.'): return 1
     return 0
 
+# Sorunsuz Çalışan Doğrudan API Bağlantısı
+def check_grammar_api(text):
+    try:
+        response = requests.post(
+            'https://api.languagetool.org/v2/check',
+            data={'text': text, 'language': 'tr'},
+            timeout=5
+        )
+        if response.status_code == 200:
+            matches = response.json().get('matches', [])
+            # Düzeltmeleri sondan başa doğru uygula ki metin kayması yaşanmasın
+            matches.sort(key=lambda x: x['offset'], reverse=True)
+            for match in matches:
+                if match['replacements']:
+                    rep = match['replacements'][0]['value']
+                    off = match['offset']
+                    length = match['length']
+                    text = text[:off] + rep + text[off+length:]
+    except:
+        pass # İnternet kesilirse formatlamaya devam et
+    return text
+
 def process_file(input_file):
     output_file = input_file.replace(".docx", "_Duzenlenmis.docx")
     doc = docx.Document(input_file)
     
-    use_spellcheck = False
-    try:
-        tool = language_tool_python.LanguageToolPublicAPI('tr')
-        use_spellcheck = True
-    except:
-        pass
-
     for para in doc.paragraphs:
         if not para.text.strip(): continue
 
-        if use_spellcheck:
-            try:
-                matches = tool.check(para.text)
-                if matches: para.text = language_tool_python.utils.correct(para.text, matches)
-            except: pass
+        # Yazım denetimi API'ye gönderiliyor
+        para.text = check_grammar_api(para.text)
 
         level = detect_heading_level(para.text, para.style.name)
         para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -88,6 +100,7 @@ def run_app():
     input_file = filedialog.askopenfilename(title="Düzenlenecek Word Dosyasını Seçin", filetypes=[("Word Dosyaları", "*.docx")])
     if input_file:
         try:
+            messagebox.showinfo("Bilgi", "İşlem başlıyor. Lütfen bekleyin...")
             out_path = process_file(input_file)
             messagebox.showinfo("Başarılı", f"İşlem tamamlandı!\nKaydedilen dosya:\n{out_path}")
         except Exception as e:
