@@ -1,2 +1,2 @@
 python-docx
-language-tool-python
+requests
